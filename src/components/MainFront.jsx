@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ArrowDown,
@@ -21,15 +22,12 @@ import {
 } from "lucide-react";
 
 const MainFront = () => {
-
+const navigate = useNavigate();
   // ---------------- BUTTON FUNCTIONS ----------------
 
-  const handleGetStarted = () => {
-    console.log("Get Started clicked");
-
-    // Later:
-    // navigate("/register");
-  };
+ const handleGetStarted = () => {
+  navigate("/tracker");
+};
 
   const handleLearnMore = () => {
     console.log("Learn More clicked");
