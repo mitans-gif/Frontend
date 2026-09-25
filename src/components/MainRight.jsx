@@ -19,14 +19,13 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-
 const MainRight = () => {
-
   // =====================================================
   // STATE
   // =====================================================
 
   const [showForm, setShowForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   const [search, setSearch] = useState("");
 
@@ -42,7 +41,6 @@ const MainRight = () => {
       cost: 1.62,
       source: "Grid",
     },
-
     {
       id: 2,
       date: "May 18, 2025",
@@ -54,7 +52,6 @@ const MainRight = () => {
       cost: 0,
       source: "Solar",
     },
-
     {
       id: 3,
       date: "May 18, 2025",
@@ -66,7 +63,6 @@ const MainRight = () => {
       cost: 12.15,
       source: "Grid",
     },
-
     {
       id: 4,
       date: "May 17, 2025",
@@ -78,7 +74,6 @@ const MainRight = () => {
       cost: 27,
       source: "Other",
     },
-
     {
       id: 5,
       date: "May 17, 2025",
@@ -92,8 +87,8 @@ const MainRight = () => {
     },
   ]);
 
-
-  const [form, setForm] = useState({
+  // ADD RECORD FORM
+  const emptyForm = {
     date: "2025-05-18",
     time: "19:45",
     appliance: "",
@@ -103,61 +98,54 @@ const MainRight = () => {
     source: "Grid Electricity",
     rate: "8.50",
     notes: "",
-  });
+  };
 
+  const [form, setForm] = useState(emptyForm);
+
+  // EDIT RECORD
+  const [editingRecord, setEditingRecord] = useState(null);
 
   // =====================================================
-  // CALCULATIONS
+  // CALCULATIONS FOR ADD FORM
   // =====================================================
 
   const calculatedKwh = useMemo(() => {
-
     const power = Number(form.power) || 0;
     const hours = Number(form.hours) || 0;
 
     return (power * hours) / 1000;
-
   }, [form.power, form.hours]);
 
-
   const calculatedCost = useMemo(() => {
-
     const rate = Number(form.rate) || 0;
 
     return calculatedKwh * rate;
-
   }, [calculatedKwh, form.rate]);
-
 
   // =====================================================
   // FORM CHANGE
   // =====================================================
 
   const handleChange = (e) => {
-
     const { name, value } = e.target;
 
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
-
   };
 
-
   // =====================================================
-  // SAVE RECORD
+  // SAVE NEW RECORD
   // =====================================================
 
   const handleSave = () => {
-
     if (!form.appliance) {
       alert("Please select an appliance.");
       return;
     }
 
     const newRecord = {
-
       id: Date.now(),
 
       date: "May 18, 2025",
@@ -178,9 +166,7 @@ const MainRight = () => {
         form.source === "Grid Electricity"
           ? "Grid"
           : form.source,
-
     };
-
 
     setRecords((previous) => [
       newRecord,
@@ -189,33 +175,98 @@ const MainRight = () => {
 
     setShowForm(false);
 
-    setForm({
-      date: "2025-05-18",
-      time: "19:45",
-      appliance: "",
-      category: "",
-      power: "75",
-      hours: "4",
-      source: "Grid Electricity",
-      rate: "8.50",
-      notes: "",
-    });
-
+    setForm(emptyForm);
   };
-
 
   // =====================================================
   // DELETE
   // =====================================================
 
   const handleDelete = (id) => {
-
     setRecords((previous) =>
       previous.filter((record) => record.id !== id)
     );
-
   };
 
+  // =====================================================
+  // EDIT
+  // =====================================================
+
+  const handleEdit = (record) => {
+    setEditingRecord({
+      ...record,
+    });
+
+    setShowEditForm(true);
+  };
+
+  // =====================================================
+  // EDIT FORM CHANGE
+  // =====================================================
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+
+    setEditingRecord((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
+  // =====================================================
+  // SAVE EDITED RECORD
+  // =====================================================
+
+  const handleUpdate = (e) => {
+    e.preventDefault();
+
+    if (!editingRecord?.appliance) {
+      alert("Please enter an appliance name.");
+      return;
+    }
+
+    const power = Number(editingRecord.power) || 0;
+    const hours = Number(editingRecord.hours) || 0;
+
+    const kwh = (power * hours) / 1000;
+
+    // Keep existing cost calculation style
+    const oldKwh = Number(editingRecord.kwh) || 0;
+    const oldCost = Number(editingRecord.cost) || 0;
+
+    let cost = oldCost;
+
+    if (oldKwh > 0) {
+      cost = (kwh / oldKwh) * oldCost;
+    }
+
+    const updatedRecord = {
+      ...editingRecord,
+
+      power,
+
+      hours,
+
+      kwh: Number(kwh.toFixed(3)),
+
+      cost:
+        editingRecord.source === "Solar" ||
+        editingRecord.source === "Wind"
+          ? 0
+          : Number(cost.toFixed(2)),
+    };
+
+    setRecords((previous) =>
+      previous.map((record) =>
+        record.id === updatedRecord.id
+          ? updatedRecord
+          : record
+      )
+    );
+
+    setShowEditForm(false);
+    setEditingRecord(null);
+  };
 
   // =====================================================
   // FILTER
@@ -227,51 +278,53 @@ const MainRight = () => {
       .includes(search.toLowerCase())
   );
 
-
   // =====================================================
   // SUMMARY
   // =====================================================
 
   const totalKwh = records
-    .reduce((total, record) => total + record.kwh, 0)
+    .reduce(
+      (total, record) => total + record.kwh,
+      0
+    )
     .toFixed(2);
-
 
   const totalCost = records
-    .reduce((total, record) => total + record.cost, 0)
+    .reduce(
+      (total, record) => total + record.cost,
+      0
+    )
     .toFixed(2);
 
-
   const dailyAverage = (
-    records.reduce((total, record) => total + record.kwh, 0) /
-    7
+    records.reduce(
+      (total, record) => total + record.kwh,
+      0
+    ) / 7
   ).toFixed(2);
-
 
   const highestDay = Math.max(
     ...records.map((record) => record.kwh)
   ).toFixed(1);
 
-
-  const co2 = (Number(totalKwh) * 0.25).toFixed(1);
-
+  const co2 = (
+    Number(totalKwh) * 0.25
+  ).toFixed(1);
 
   // =====================================================
   // JSX
   // =====================================================
 
   return (
+    <main className="min-h-screen flex-1">
 
-    <main className="ml-[220px] min-h-screen flex-1">
-
-      {/* ============================================= */}
+      {/* ================================================= */}
       {/* HEADER */}
-      {/* ============================================= */}
+      {/* ================================================= */}
 
       <div className="flex items-center justify-between px-8 py-7">
 
         <div>
-
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
             Energy Tracker
           </h1>
@@ -279,30 +332,23 @@ const MainRight = () => {
           <p className="mt-1 text-sm text-slate-500">
             Track and manage your energy consumption records.
           </p>
-
         </div>
-
 
         <button
           onClick={() => setShowForm(true)}
           className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-green-600/20 transition hover:bg-green-700 active:scale-95"
         >
-
           <Plus size={18} />
-
           Add Record
-
         </button>
 
       </div>
 
-
       <div className="px-8 pb-8">
 
-
-        {/* ============================================= */}
+        {/* ================================================= */}
         {/* FILTERS */}
-        {/* ============================================= */}
+        {/* ================================================= */}
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
 
@@ -311,7 +357,6 @@ const MainRight = () => {
             {/* DATE */}
 
             <div>
-
               <label className="mb-2 block text-xs font-medium text-slate-700">
                 Date Range
               </label>
@@ -319,27 +364,22 @@ const MainRight = () => {
               <button className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700">
 
                 <span className="flex items-center gap-2">
-
                   <CalendarDays
                     size={17}
                     className="text-slate-500"
                   />
 
                   May 12, 2025 – May 18, 2025
-
                 </span>
 
                 <ChevronDown size={15} />
 
               </button>
-
             </div>
-
 
             {/* SEARCH */}
 
             <div>
-
               <label className="mb-2 block text-xs font-medium text-slate-700">
                 Search Appliance
               </label>
@@ -353,20 +393,19 @@ const MainRight = () => {
 
                 <input
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) =>
+                    setSearch(e.target.value)
+                  }
                   placeholder="Search appliance..."
                   className="w-full rounded-lg border border-slate-200 py-3 pl-10 pr-3 text-sm outline-none focus:border-green-500"
                 />
 
               </div>
-
             </div>
-
 
             {/* SOURCE */}
 
             <div>
-
               <label className="mb-2 block text-xs font-medium text-slate-700">
                 Source
               </label>
@@ -380,14 +419,11 @@ const MainRight = () => {
                 <option>Other</option>
 
               </select>
-
             </div>
-
 
             {/* SORT */}
 
             <div>
-
               <label className="mb-2 block text-xs font-medium text-slate-700">
                 Sort By
               </label>
@@ -407,27 +443,22 @@ const MainRight = () => {
                   onClick={() => setSearch("")}
                   className="flex items-center gap-1 rounded-lg border border-green-600 px-4 text-sm font-medium text-green-700 hover:bg-green-50"
                 >
-
                   <RotateCcw size={16} />
-
                   Reset
-
                 </button>
 
               </div>
-
             </div>
 
           </div>
 
         </section>
 
-
-        {/* ============================================= */}
+        {/* ================================================= */}
         {/* STAT CARDS */}
-        {/* ============================================= */}
+        {/* ================================================= */}
 
-        <section className="mt-5 grid gap-4 xl:grid-cols-5 md:grid-cols-3 sm:grid-cols-2">
+        <section className="mt-5 grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
 
           <StatCard
             icon={<Zap />}
@@ -474,10 +505,9 @@ const MainRight = () => {
 
         </section>
 
-
-        {/* ============================================= */}
+        {/* ================================================= */}
         {/* TABLE */}
-        {/* ============================================= */}
+        {/* ================================================= */}
 
         <section className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
@@ -525,7 +555,6 @@ const MainRight = () => {
 
               </thead>
 
-
               <tbody>
 
                 {filteredRecords.map((record) => (
@@ -547,7 +576,6 @@ const MainRight = () => {
 
                     </td>
 
-
                     <td className="px-5 py-4">
 
                       <div className="flex items-center gap-3">
@@ -564,21 +592,17 @@ const MainRight = () => {
 
                     </td>
 
-
                     <td className="px-5 py-4 text-sm text-slate-600">
                       {record.power}
                     </td>
-
 
                     <td className="px-5 py-4 text-sm text-slate-600">
                       {record.hours.toFixed(1)}
                     </td>
 
-
                     <td className="px-5 py-4 text-sm font-medium text-slate-700">
                       {record.kwh.toFixed(3)}
                     </td>
-
 
                     <td className="px-5 py-4 text-sm font-medium text-slate-700">
 
@@ -587,7 +611,6 @@ const MainRight = () => {
                         : record.cost.toFixed(2)}
 
                     </td>
-
 
                     <td className="px-5 py-4">
 
@@ -611,21 +634,30 @@ const MainRight = () => {
 
                     </td>
 
-
                     <td className="px-5 py-4">
 
                       <div className="flex gap-2">
 
+                        {/* EDIT BUTTON */}
+
                         <button
-                          className="grid h-9 w-9 place-items-center rounded-lg border border-green-200 text-green-700 hover:bg-green-50"
+                          onClick={() =>
+                            handleEdit(record)
+                          }
+                          title="Edit record"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-green-200 text-green-700 transition hover:bg-green-50"
                         >
                           <Pencil size={16} />
                         </button>
 
+                        {/* DELETE BUTTON */}
 
                         <button
-                          onClick={() => handleDelete(record.id)}
-                          className="grid h-9 w-9 place-items-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50"
+                          onClick={() =>
+                            handleDelete(record.id)
+                          }
+                          title="Delete record"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-red-200 text-red-500 transition hover:bg-red-50"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -644,7 +676,6 @@ const MainRight = () => {
 
           </div>
 
-
           {/* TABLE FOOTER */}
 
           <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4">
@@ -653,7 +684,6 @@ const MainRight = () => {
               Showing 1 to {filteredRecords.length} of{" "}
               {records.length} records
             </p>
-
 
             <div className="flex items-center gap-2">
 
@@ -684,10 +714,9 @@ const MainRight = () => {
 
         </section>
 
-
-        {/* ============================================= */}
+        {/* ================================================= */}
         {/* BOTTOM MESSAGE */}
-        {/* ============================================= */}
+        {/* ================================================= */}
 
         <div className="mt-5 flex items-center gap-4 rounded-xl border border-green-100 bg-green-50 px-5 py-4">
 
@@ -703,33 +732,23 @@ const MainRight = () => {
 
       </div>
 
-
-      {/* ============================================= */}
+      {/* ================================================= */}
       {/* ADD RECORD SIDE PANEL */}
-      {/* ============================================= */}
+      {/* ================================================= */}
 
       {showForm && (
-
         <>
-
-          {/* OVERLAY */}
 
           <div
             onClick={() => setShowForm(false)}
             className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[1px]"
           />
 
-
-          {/* PANEL */}
-
           <aside className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[390px] flex-col bg-white shadow-2xl">
-
-            {/* PANEL HEADER */}
 
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
 
               <div>
-
                 <h2 className="text-xl font-bold text-slate-900">
                   Add Energy Record
                 </h2>
@@ -737,23 +756,16 @@ const MainRight = () => {
                 <p className="mt-1 text-xs text-slate-500">
                   Enter details of your energy usage.
                 </p>
-
               </div>
-
 
               <button
                 onClick={() => setShowForm(false)}
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
-
                 <X size={20} />
-
               </button>
 
             </div>
-
-
-            {/* FORM */}
 
             <div className="flex-1 overflow-y-auto px-6 py-5">
 
@@ -764,7 +776,6 @@ const MainRight = () => {
                 value={form.date}
                 onChange={handleChange}
               />
-
 
               <FormSelect
                 label="Appliance"
@@ -789,7 +800,6 @@ const MainRight = () => {
                 ]}
               />
 
-
               <FormSelect
                 label="Category"
                 value={form.category}
@@ -810,7 +820,6 @@ const MainRight = () => {
                 ]}
               />
 
-
               <FormInput
                 label="Power Consumption (W)"
                 name="power"
@@ -819,7 +828,6 @@ const MainRight = () => {
                 unit="W"
               />
 
-
               <FormInput
                 label="Usage Hours (h)"
                 name="hours"
@@ -827,7 +835,6 @@ const MainRight = () => {
                 onChange={handleChange}
                 unit="h"
               />
-
 
               <FormSelect
                 label="Energy Source"
@@ -846,7 +853,6 @@ const MainRight = () => {
                 ]}
               />
 
-
               <FormInput
                 label="Electricity Rate (₹/kWh)"
                 name="rate"
@@ -854,9 +860,6 @@ const MainRight = () => {
                 onChange={handleChange}
                 unit="₹/kWh"
               />
-
-
-              {/* NOTES */}
 
               <div className="mt-5">
 
@@ -875,9 +878,6 @@ const MainRight = () => {
 
               </div>
 
-
-              {/* CALCULATED VALUES */}
-
               <div className="mt-5 rounded-xl border border-green-200 bg-green-50 p-4">
 
                 <div className="flex items-center gap-2 text-green-700">
@@ -890,11 +890,9 @@ const MainRight = () => {
 
                 </div>
 
-
                 <div className="mt-4 grid grid-cols-2 gap-4">
 
                   <div>
-
                     <p className="text-[11px] text-slate-500">
                       Energy (kWh)
                     </p>
@@ -902,12 +900,9 @@ const MainRight = () => {
                     <p className="mt-1 text-lg font-bold text-slate-900">
                       {calculatedKwh.toFixed(3)} kWh
                     </p>
-
                   </div>
 
-
                   <div>
-
                     <p className="text-[11px] text-slate-500">
                       Cost (₹)
                     </p>
@@ -915,11 +910,9 @@ const MainRight = () => {
                     <p className="mt-1 text-lg font-bold text-slate-900">
                       {calculatedCost.toFixed(2)}
                     </p>
-
                   </div>
 
                 </div>
-
 
                 <div className="mt-4 border-t border-green-200 pt-3 text-[11px] leading-5 text-slate-500">
 
@@ -937,9 +930,6 @@ const MainRight = () => {
 
             </div>
 
-
-            {/* PANEL FOOTER */}
-
             <div className="flex gap-4 border-t border-slate-200 bg-white px-6 py-5">
 
               <button
@@ -948,7 +938,6 @@ const MainRight = () => {
               >
                 Cancel
               </button>
-
 
               <button
                 onClick={handleSave}
@@ -962,27 +951,234 @@ const MainRight = () => {
           </aside>
 
         </>
+      )}
 
+      {/* ================================================= */}
+      {/* EDIT RECORD MODAL */}
+      {/* ================================================= */}
+
+      {showEditForm && editingRecord && (
+        <>
+          {/* OVERLAY */}
+
+          <div
+            onClick={() => {
+              setShowEditForm(false);
+              setEditingRecord(null);
+            }}
+            className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm"
+          />
+
+          {/* MODAL */}
+
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+              {/* HEADER */}
+
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    Edit Energy Record
+                  </h2>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Update your energy usage details.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditForm(false);
+                    setEditingRecord(null);
+                  }}
+                  className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100"
+                >
+                  <X size={20} />
+                </button>
+
+              </div>
+
+              {/* FORM */}
+
+              <form
+                onSubmit={handleUpdate}
+                className="space-y-5 p-6"
+              >
+
+                {/* APPLIANCE */}
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-slate-700">
+                    Appliance
+                  </label>
+
+                  <input
+                    type="text"
+                    name="appliance"
+                    value={editingRecord.appliance || ""}
+                    onChange={handleEditChange}
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none transition focus:border-green-500"
+                  />
+                </div>
+
+                {/* POWER */}
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-slate-700">
+                    Power Consumption (W)
+                  </label>
+
+                  <input
+                    type="number"
+                    name="power"
+                    value={editingRecord.power ?? ""}
+                    onChange={handleEditChange}
+                    min="0"
+                    step="1"
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none transition focus:border-green-500"
+                  />
+                </div>
+
+                {/* HOURS */}
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-slate-700">
+                    Usage Hours (h)
+                  </label>
+
+                  <input
+                    type="number"
+                    name="hours"
+                    value={editingRecord.hours ?? ""}
+                    onChange={handleEditChange}
+                    min="0"
+                    step="0.1"
+                    required
+                    className="w-full rounded-lg border border-slate-200 px-3 py-3 text-sm outline-none transition focus:border-green-500"
+                  />
+                </div>
+
+                {/* SOURCE */}
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-slate-700">
+                    Energy Source
+                  </label>
+
+                  <select
+                    name="source"
+                    value={editingRecord.source || "Grid"}
+                    onChange={handleEditChange}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-green-500"
+                  >
+                    <option value="Grid">
+                      Grid
+                    </option>
+
+                    <option value="Solar">
+                      Solar
+                    </option>
+
+                    <option value="Wind">
+                      Wind
+                    </option>
+
+                    <option value="Other">
+                      Other
+                    </option>
+                  </select>
+                </div>
+
+                {/* PREVIEW */}
+
+                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+
+                  <p className="text-xs font-semibold text-green-700">
+                    Updated Calculation
+                  </p>
+
+                  <div className="mt-3 grid grid-cols-2 gap-4">
+
+                    <div>
+                      <p className="text-[11px] text-slate-500">
+                        Energy
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold text-slate-900">
+                        {(
+                          (Number(editingRecord.power) || 0) *
+                          (Number(editingRecord.hours) || 0)
+                        / 1000
+                        ).toFixed(3)}{" "}
+                        kWh
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-[11px] text-slate-500">
+                        Source
+                      </p>
+
+                      <p className="mt-1 text-lg font-bold text-slate-900">
+                        {editingRecord.source}
+                      </p>
+                    </div>
+
+                  </div>
+
+                </div>
+
+                {/* BUTTONS */}
+
+                <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditForm(false);
+                      setEditingRecord(null);
+                    }}
+                    className="rounded-lg border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-green-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-green-700"
+                  >
+                    Save Changes
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
+
+          </div>
+        </>
       )}
 
     </main>
   );
 };
 
-
 // =====================================================
 // SMALL COMPONENTS
 // =====================================================
 
-
 const TableHead = ({ children }) => (
-
   <th className="px-5 py-4 text-left text-xs font-semibold text-slate-600">
     {children}
   </th>
-
 );
-
 
 const StatCard = ({
   icon,
@@ -992,29 +1188,20 @@ const StatCard = ({
   subtitle,
   color,
 }) => {
-
   const colors = {
-
     green: "bg-green-50 text-green-600",
-
     blue: "bg-blue-50 text-blue-600",
-
     yellow: "bg-yellow-50 text-yellow-600",
-
     purple: "bg-purple-50 text-purple-600",
-
   };
 
   return (
-
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
 
       <div className="flex items-center gap-3">
 
         <div
-          className={`grid h-12 w-12 place-items-center rounded-full ${
-            colors[color]
-          }`}
+          className={`grid h-12 w-12 place-items-center rounded-full ${colors[color]}`}
         >
           {icon}
         </div>
@@ -1048,10 +1235,8 @@ const StatCard = ({
       </div>
 
     </div>
-
   );
 };
-
 
 const FormInput = ({
   label,
@@ -1061,7 +1246,6 @@ const FormInput = ({
   type = "number",
   unit,
 }) => (
-
   <div className="mb-5">
 
     <label className="mb-2 block text-xs font-medium text-slate-700">
@@ -1079,19 +1263,15 @@ const FormInput = ({
       />
 
       {unit && (
-
         <span className="flex items-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 px-3 text-xs text-slate-500">
           {unit}
         </span>
-
       )}
 
     </div>
 
   </div>
-
 );
-
 
 const FormSelect = ({
   label,
@@ -1099,7 +1279,6 @@ const FormSelect = ({
   onChange,
   options,
 }) => (
-
   <div className="mb-5">
 
     <label className="mb-2 block text-xs font-medium text-slate-700">
@@ -1117,21 +1296,17 @@ const FormSelect = ({
       </option>
 
       {options.map((option) => (
-
         <option
           key={option}
           value={option}
         >
           {option}
         </option>
-
       ))}
 
     </select>
 
   </div>
-
 );
-
 
 export default MainRight;
