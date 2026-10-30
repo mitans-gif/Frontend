@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ecotrack-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: DEVICE_API_KEY
+        sync: false
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: DEFAULT_DEVICE_ID
+        value: ESP32_AC_001
+      - key: ELECTRICITY_TARIFF_INR_PER_KWH
+        value: "7.5"
+      - key: GRID_EMISSION_KG_CO2_PER_KWH
+        value: "0.716"
