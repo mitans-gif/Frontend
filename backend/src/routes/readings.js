@@ -1,66 +1,72 @@
 import { Router } from "express";
 import EnergyReading from "../models/EnergyReading.js";
+import {
+  calculateEnergyDelta,
+  calculateImpact,
+  isValidReading,
+  readNonNegativeEnv
+} from "../utils/energy.js";
 
 const router = Router();
+const DEFAULT_DEVICE_ID = process.env.DEFAULT_DEVICE_ID || "ESP32_AC_001";
 
-const positiveNumber = (value) =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0;
+function getImpactSettings() {
+  return {
+    tariff: readNonNegativeEnv("ELECTRICITY_TARIFF_INR_PER_KWH", 7.5),
+    emissionFactor: readNonNegativeEnv("GRID_EMISSION_KG_CO2_PER_KWH", 0.716)
+  };
+}
+
+function getDeviceId(value) {
+  const deviceId = typeof value === "string" ? value.trim() : DEFAULT_DEVICE_ID;
+  return deviceId && deviceId.length <= 100 ? deviceId : null;
+}
 
 router.post("/", async (req, res, next) => {
   try {
-    const {
-      deviceId,
-      voltage,
-      current,
-      power,
-      energyKwh,
-      frequency = null,
-      powerFactor = null,
-      recordedAt
-    } = req.body;
+    const body = {
+      ...req.body,
+      frequency: req.body?.frequency ?? null,
+      powerFactor: req.body?.powerFactor ?? null
+    };
 
-    if (
-      typeof deviceId !== "string" ||
-      !deviceId.trim() ||
-      ![voltage, current, power, energyKwh].every(positiveNumber) ||
-      (frequency !== null && !positiveNumber(frequency)) ||
-      (powerFactor !== null &&
-        (typeof powerFactor !== "number" || powerFactor < 0 || powerFactor > 1))
-    ) {
+    if (!isValidReading(body)) {
       return res.status(400).json({
-        message: "Invalid reading. Send deviceId, voltage, current, power and energyKwh as valid numbers."
+        message: "Invalid reading. Provide a deviceId and finite non-negative voltage, current, power and energyKwh values. powerFactor must be between 0 and 1."
       });
     }
 
-    const timestamp = recordedAt ? new Date(recordedAt) : new Date();
+    if (body.deviceId.trim().length > 100) {
+      return res.status(400).json({ message: "deviceId must be 100 characters or fewer." });
+    }
+
+    const timestamp = body.recordedAt ? new Date(body.recordedAt) : new Date();
     if (Number.isNaN(timestamp.getTime())) {
       return res.status(400).json({ message: "recordedAt must be a valid date." });
     }
+    if (timestamp.getTime() > Date.now() + 5 * 60 * 1000) {
+      return res.status(400).json({ message: "recordedAt cannot be more than five minutes in the future." });
+    }
 
-    const previous = await EnergyReading.findOne({ deviceId: deviceId.trim() })
+    const previous = await EnergyReading.findOne({ deviceId: body.deviceId.trim() })
       .sort({ recordedAt: -1 })
       .lean();
-
-    const resetDetected = Boolean(previous && energyKwh < previous.meterEnergyKwh);
-    const deltaKwh = previous && !resetDetected
-      ? Math.max(0, energyKwh - previous.meterEnergyKwh)
-      : 0;
-
+    const energyDelta = calculateEnergyDelta(previous?.meterEnergyKwh ?? null, body.energyKwh);
     const reading = await EnergyReading.create({
-      deviceId: deviceId.trim(),
-      voltage,
-      current,
-      power,
-      meterEnergyKwh: energyKwh,
-      deltaKwh,
-      frequency,
-      powerFactor,
-      resetDetected,
+      deviceId: body.deviceId.trim(),
+      voltage: body.voltage,
+      current: body.current,
+      power: body.power,
+      meterEnergyKwh: body.energyKwh,
+      deltaKwh: energyDelta.deltaKwh,
+      frequency: body.frequency,
+      powerFactor: body.powerFactor,
+      resetDetected: energyDelta.resetDetected,
       recordedAt: timestamp
     });
 
-    const tariff = Number(process.env.ELECTRICITY_TARIFF_INR_PER_KWH ?? 7.5);
-    const emissionFactor = Number(process.env.GRID_EMISSION_KG_CO2_PER_KWH ?? 0.716);
+    const { tariff, emissionFactor } = getImpactSettings();
+    const impact = calculateImpact(reading.deltaKwh, tariff, emissionFactor);
     const payload = {
       id: reading._id,
       deviceId: reading.deviceId,
@@ -69,11 +75,11 @@ router.post("/", async (req, res, next) => {
       power: reading.power,
       energyKwh: reading.meterEnergyKwh,
       deltaKwh: reading.deltaKwh,
-      estimatedCostInr: Number((reading.deltaKwh * tariff).toFixed(2)),
-      estimatedCo2Kg: Number((reading.deltaKwh * emissionFactor).toFixed(4)),
+      ...impact,
       frequency: reading.frequency,
       powerFactor: reading.powerFactor,
       resetDetected: reading.resetDetected,
+      baseline: energyDelta.baseline,
       recordedAt: reading.recordedAt
     };
 
@@ -86,17 +92,17 @@ router.post("/", async (req, res, next) => {
 
 router.get("/live", async (req, res, next) => {
   try {
-    const deviceId = req.query.deviceId || "ESP32_AC_001";
+    const deviceId = getDeviceId(req.query.deviceId);
+    if (!deviceId) return res.status(400).json({ message: "Invalid deviceId." });
+
     const reading = await EnergyReading.findOne({ deviceId }).sort({ recordedAt: -1 }).lean();
     if (!reading) return res.status(404).json({ message: "No readings found for this device." });
 
-    const tariff = Number(process.env.ELECTRICITY_TARIFF_INR_PER_KWH ?? 7.5);
-    const emissionFactor = Number(process.env.GRID_EMISSION_KG_CO2_PER_KWH ?? 0.716);
+    const { tariff, emissionFactor } = getImpactSettings();
     return res.json({
       ...reading,
       energyKwh: reading.meterEnergyKwh,
-      estimatedCostInr: Number((reading.deltaKwh * tariff).toFixed(2)),
-      estimatedCo2Kg: Number((reading.deltaKwh * emissionFactor).toFixed(4))
+      ...calculateImpact(reading.deltaKwh, tariff, emissionFactor)
     });
   } catch (error) {
     next(error);
@@ -105,13 +111,15 @@ router.get("/live", async (req, res, next) => {
 
 router.get("/history", async (req, res, next) => {
   try {
-    const deviceId = req.query.deviceId || "ESP32_AC_001";
-    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 1000);
+    const deviceId = getDeviceId(req.query.deviceId);
+    if (!deviceId) return res.status(400).json({ message: "Invalid deviceId." });
+    const requestedLimit = Number(req.query.limit) || 100;
+    const limit = Math.min(Math.max(Math.floor(requestedLimit), 1), 1000);
     const readings = await EnergyReading.find({ deviceId })
       .sort({ recordedAt: -1 })
       .limit(limit)
       .lean();
-    return res.json({ count: readings.length, readings });
+    return res.json({ deviceId, count: readings.length, readings });
   } catch (error) {
     next(error);
   }
@@ -119,8 +127,9 @@ router.get("/history", async (req, res, next) => {
 
 router.get("/analytics/daily", async (req, res, next) => {
   try {
-    const deviceId = req.query.deviceId || "ESP32_AC_001";
-    const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
+    const deviceId = getDeviceId(req.query.deviceId);
+    if (!deviceId) return res.status(400).json({ message: "Invalid deviceId." });
+    const days = Math.min(Math.max(Math.floor(Number(req.query.days) || 7), 1), 90);
     const from = new Date();
     from.setHours(0, 0, 0, 0);
     from.setDate(from.getDate() - (days - 1));
@@ -129,24 +138,20 @@ router.get("/analytics/daily", async (req, res, next) => {
       { $match: { deviceId, recordedAt: { $gte: from } } },
       {
         $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$recordedAt", timezone: "Asia/Kolkata" }
-          },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$recordedAt", timezone: "Asia/Kolkata" } },
           energyKwh: { $sum: "$deltaKwh" }
         }
       },
       { $sort: { _id: 1 } }
     ]);
 
-    const tariff = Number(process.env.ELECTRICITY_TARIFF_INR_PER_KWH ?? 7.5);
-    const emissionFactor = Number(process.env.GRID_EMISSION_KG_CO2_PER_KWH ?? 0.716);
+    const { tariff, emissionFactor } = getImpactSettings();
     return res.json({
       deviceId,
       days: rows.map((row) => ({
         date: row._id,
         energyKwh: Number(row.energyKwh.toFixed(4)),
-        estimatedCostInr: Number((row.energyKwh * tariff).toFixed(2)),
-        estimatedCo2Kg: Number((row.energyKwh * emissionFactor).toFixed(4))
+        ...calculateImpact(row.energyKwh, tariff, emissionFactor)
       }))
     });
   } catch (error) {
@@ -156,8 +161,9 @@ router.get("/analytics/daily", async (req, res, next) => {
 
 router.get("/analytics/monthly", async (req, res, next) => {
   try {
-    const deviceId = req.query.deviceId || "ESP32_AC_001";
-    const months = Math.min(Math.max(Number(req.query.months) || 6, 1), 24);
+    const deviceId = getDeviceId(req.query.deviceId);
+    if (!deviceId) return res.status(400).json({ message: "Invalid deviceId." });
+    const months = Math.min(Math.max(Math.floor(Number(req.query.months) || 6), 1), 24);
     const from = new Date();
     from.setDate(1);
     from.setHours(0, 0, 0, 0);
@@ -174,15 +180,13 @@ router.get("/analytics/monthly", async (req, res, next) => {
       { $sort: { _id: 1 } }
     ]);
 
-    const tariff = Number(process.env.ELECTRICITY_TARIFF_INR_PER_KWH ?? 7.5);
-    const emissionFactor = Number(process.env.GRID_EMISSION_KG_CO2_PER_KWH ?? 0.716);
+    const { tariff, emissionFactor } = getImpactSettings();
     return res.json({
       deviceId,
       months: rows.map((row) => ({
         month: row._id,
         energyKwh: Number(row.energyKwh.toFixed(4)),
-        estimatedCostInr: Number((row.energyKwh * tariff).toFixed(2)),
-        estimatedCo2Kg: Number((row.energyKwh * emissionFactor).toFixed(4))
+        ...calculateImpact(row.energyKwh, tariff, emissionFactor)
       }))
     });
   } catch (error) {
