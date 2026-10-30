@@ -10,7 +10,8 @@ const app = express();
 const server = http.createServer(app);
 const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
   .split(",")
-  .map((origin) => origin.trim());
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const io = new Server(server, {
   cors: { origin: allowedOrigins, methods: ["GET", "POST"] }
@@ -21,10 +22,12 @@ app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: "20kb" }));
 
 app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
+  const databaseConnected = mongoose.connection.readyState === 1;
+  res.status(databaseConnected ? 200 : 503).json({
+    status: databaseConnected ? "ok" : "degraded",
     service: "EcoTrack API",
-    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    database: databaseConnected ? "connected" : "disconnected",
+    defaultDeviceId: process.env.DEFAULT_DEVICE_ID || "ESP32_AC_001",
     time: new Date().toISOString()
   });
 });
@@ -41,8 +44,11 @@ app.use("/api/readings", (req, res, next) => {
 }, readingsRouter);
 
 app.use((error, _req, res, _next) => {
+  if (error instanceof SyntaxError && error.status === 400 && "body" in error) {
+    return res.status(400).json({ message: "Request body must contain valid JSON." });
+  }
   console.error(error);
-  res.status(500).json({ message: "Internal server error." });
+  return res.status(500).json({ message: "Internal server error." });
 });
 
 const port = Number(process.env.PORT || 5000);
