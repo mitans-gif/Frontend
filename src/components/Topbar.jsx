@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { ArrowRight, Zap } from "lucide-react";
 
 const Topbar = () => {
@@ -77,6 +78,13 @@ const Topbar = () => {
           >
             Login
           </button>
+
+          <Link
+            to="/monitor"
+            className="hidden rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-green-600/20 transition duration-200 hover:bg-green-700 active:scale-95 sm:inline-flex"
+          >
+            AC Live Monitor
+          </Link>
 
           <button
             onClick={handleRegister}
