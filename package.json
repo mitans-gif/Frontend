@@ -1,13 +1,16 @@
 {
-  "name": "my-react-app",
+  "name": "ecotrack-smart-energy",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backend:install": "npm --prefix backend install",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:start": "npm --prefix backend start"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
