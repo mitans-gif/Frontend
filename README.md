@@ -4,7 +4,7 @@ EcoTrack is a React + Vite energy-tracking application. It includes the original
 
 ## Start the website
 
-Requirements: Node.js 20+ and npm.
+Requirements: Node.js 20.19+ (or 22.12+) and npm.
 
 ```bash
 git clone https://github.com/mitans-gif/Frontend.git
