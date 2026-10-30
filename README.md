@@ -83,7 +83,18 @@ Before flashing, update the Wi-Fi name/password, API URL and device API key. For
 
 The first cumulative meter reading establishes a baseline. Usage is calculated from the difference between consecutive cumulative kWh readings. A counter reset is flagged and does not create fictitious consumption.
 
-## 5. Included pages
+## 5. Deploy the backend
+
+A Render Blueprint is included in `render.yaml`. In Render, create a new Blueprint from this repository and provide the required environment values when prompted:
+- `MONGODB_URI` — MongoDB Atlas connection string
+- `DEVICE_API_KEY` — the same secret that will be configured in the ESP32 firmware
+- `CLIENT_ORIGIN` — your deployed Vercel frontend URL (for example, `https://your-project.vercel.app`)
+
+After deployment, copy the Render API URL into the Vercel project environment variable `VITE_API_BASE_URL`, then redeploy the frontend. Keep MongoDB credentials and the device key only in backend environment settings; never add them to frontend code.
+
+The API health check is `/api/health`. It will only report healthy when MongoDB is connected.
+
+## 6. Included pages
 
 - Landing page and energy dashboard
 - Tracker and calculator
@@ -91,7 +102,7 @@ The first cumulative meter reading establishes a baseline. Usage is calculated f
 - 4R's, recommendations, actions and goals
 - Renewable energy, impact and profile pages
 
-## 6. Safety and current limitations
+## 7. Safety and current limitations
 
 **Mains electrical installation must be done and checked by a qualified electrician.** The meter, CT, enclosure, wiring and protection must be selected for the actual AC circuit and local requirements. Never connect mains voltage to ESP32 GPIO or handle exposed mains conductors. ESP32 GPIO is 3.3 V and is not 5 V tolerant; verify the exact meter's UART voltage and isolation before connecting it.
 
@@ -99,7 +110,7 @@ The exact Samsung AC model and circuit rating have not been verified. Do not buy
 
 **Software status:** frontend, Express API, MongoDB data model, telemetry endpoints, ESP32 starter firmware and backend unit tests are in the repository. Live measurements require your MongoDB configuration and physical hardware installation. Demo mode is not real monitoring.
 
-## 7. Production build
+## 8. Production build
 
 ```powershell
 npm run build
