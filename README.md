@@ -1,117 +1,109 @@
 # EcoTrack — Smart Energy & Sustainability Tracker
 
-EcoTrack is a React + Vite energy-tracking application. It includes the original sustainability pages plus an AC Smart Monitor designed for an ESP32 + PZEM-004T energy meter.
+EcoTrack is a React + Vite sustainability tracker with an AC energy-monitoring module designed for an ESP32 and a compatible external energy meter.
 
-## Start the website
+## 1. Run the frontend (Windows / VS Code)
 
-Requirements: Node.js 20.19+ (or 22.12+) and npm.
+From the repository root:
 
-```bash
-git clone https://github.com/mitans-gif/Frontend.git
-cd Frontend
+```powershell
 npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite (normally http://localhost:5173). Go to **AC Live Monitor** from the sidebar or open http://localhost:5173/monitor.
+Open the Vite URL printed in the terminal (normally `http://localhost:5173`). The AC monitor is at `http://localhost:5173/monitor`.
 
-The monitor opens in **Demo data** mode so the UI can be explored without hardware or a database. Demo readings are simulated and clearly labelled. They must not be presented as real AC measurements.
+The monitor starts in **Demo data** mode. Demo values are simulated for interface preview only; they are not readings from your AC.
 
-To create a production frontend bundle:
+## 2. Run the backend and MongoDB
 
-```bash
-npm run build
-npm run preview
-```
+The API needs a MongoDB database. You can run MongoDB locally or use MongoDB Atlas.
 
-## Start the backend for real meter data
+Open a second VS Code terminal:
 
-The backend is a separate Node.js service and requires MongoDB.
-
-1. Install and run MongoDB locally, or create a MongoDB Atlas database.
-2. In a second terminal:
-
-```bash
+```powershell
 cd backend
 npm install
+Copy-Item .env.example .env
 ```
 
-3. Copy `backend/.env.example` to `backend/.env`.
-4. Set `MONGODB_URI`, a long random `DEVICE_API_KEY`, the correct electricity tariff, and an appropriate grid-emissions factor.
-5. Start the API:
+Edit `backend/.env` and configure:
+- `MONGODB_URI`: your local or Atlas MongoDB connection string
+- `DEVICE_API_KEY`: a long random secret shared only with your ESP32
+- `ELECTRICITY_TARIFF_INR_PER_KWH`: tariff from your electricity bill
+- `GRID_EMISSION_KG_CO2_PER_KWH`: documented emissions factor
+- `CLIENT_ORIGIN`: frontend origin (local default is correct for Vite)
 
-```bash
+Start the API:
+
+```powershell
 npm run dev
 ```
 
-The API listens on http://localhost:5000. The frontend calls this address by default. If the API is hosted elsewhere, create a root `.env` file with:
+Open `http://localhost:5000/api/health`. A successful response should show `"status": "ok"` and `"database": "connected"`.
+
+To run backend unit tests (no database needed):
+
+```powershell
+npm test
+```
+
+For frontend live mode, create a root `.env` file only if your API is not at `http://localhost:5000`:
 
 ```env
-VITE_API_BASE_URL=https://your-api-host.example
+VITE_API_BASE_URL=http://localhost:5000
 ```
 
 Restart Vite after changing environment variables.
 
-## AC monitor data flow
+## 3. Hardware data flow
 
 ```text
-Samsung AC circuit
-       |
-Qualified electrician installs correctly rated PZEM energy meter + CT
-       |
-PZEM low-voltage UART interface
-       |
-ESP32 (Wi-Fi)
-       | HTTPS/HTTP POST + device API key
-EcoTrack Express API
-       |
-MongoDB energy readings
-       |
-React AC Live Monitor
+AC electrical circuit
+  -> correctly rated meter installed by a qualified electrician
+  -> low-voltage meter interface
+  -> ESP32 Wi-Fi
+  -> Express API
+  -> MongoDB
+  -> React AC Live Monitor
 ```
 
-The ESP32 firmware starter is in `hardware/esp32-pzem/esp32-pzem.ino`. Update the Wi-Fi name/password, API URL, and device key before flashing. The API URL must be reachable from the ESP32. For a local development setup, use the computer's LAN IP address rather than `localhost`.
+Firmware starter: `hardware/esp32-pzem/esp32-pzem.ino`.
 
-The firmware uses the PZEM-004T v3 Arduino library API as a starting point. Confirm the exact meter version and library compatibility before flashing. Check UART logic voltage: ESP32 GPIO is 3.3V and is not 5V tolerant; use an appropriate level shifter where required.
+Before flashing, update the Wi-Fi name/password, API URL and device API key. For a local server, use your computer's LAN IP in the firmware (not `localhost`). The ESP32 and computer must be able to reach each other on the network.
 
-## API endpoints
+## 4. API endpoints
 
-- `GET /api/health` — API and MongoDB health
-- `POST /api/readings` — receive a meter reading (requires `x-device-key`)
+- `GET /api/health` — API and database health
+- `POST /api/readings` — store meter reading (requires `x-device-key`)
 - `GET /api/readings/live?deviceId=ESP32_AC_001` — latest reading
 - `GET /api/readings/history?deviceId=ESP32_AC_001&limit=100` — recent readings
-- `GET /api/readings/analytics/daily?days=7` — daily kWh, estimated cost and CO₂
-- `GET /api/readings/analytics/monthly?months=6` — monthly kWh, estimated cost and CO₂
+- `GET /api/readings/analytics/daily?days=7` — daily kWh, cost and CO₂ estimate
+- `GET /api/readings/analytics/monthly?months=6` — monthly kWh, cost and CO₂ estimate
 
-## Measurement and calculation rules
+The first cumulative meter reading establishes a baseline. Usage is calculated from the difference between consecutive cumulative kWh readings. A counter reset is flagged and does not create fictitious consumption.
 
-- PZEM cumulative energy is stored as a meter counter in kWh.
-- EcoTrack calculates the interval consumption from the difference between consecutive meter counters. The first reading establishes a baseline and therefore has zero interval usage.
-- If the counter decreases (for example, after a meter reset), the reading is flagged and the interval is set to zero. Check the meter and establish a new baseline.
-- Estimated electricity cost = interval kWh × configured INR/kWh tariff.
-- Estimated grid emissions = interval kWh × configured kg CO₂/kWh factor.
-- Cost and emissions are estimates. Set the tariff from the applicable electricity bill and use a documented, appropriate grid-emissions factor. Defaults in `.env.example` are illustrative configuration values, not official rates.
+## 5. Included pages
 
-## Pages
-
-- Landing page
-- Energy dashboard
+- Landing page and energy dashboard
 - Tracker and calculator
-- AC Live Monitor (demo/live source switch)
-- 4R's, recommendations, actions, goals, renewable energy and impact pages
-- Profile
+- AC Live Monitor (demo/live data source)
+- 4R's, recommendations, actions and goals
+- Renewable energy, impact and profile pages
 
-## Hardware and electrical safety
+## 6. Safety and current limitations
 
-A normal non-Wi-Fi AC cannot provide live electrical measurements to a website by itself. An external meter and a data link are required.
+**Mains electrical installation must be done and checked by a qualified electrician.** The meter, CT, enclosure, wiring and protection must be selected for the actual AC circuit and local requirements. Never connect mains voltage to ESP32 GPIO or handle exposed mains conductors. ESP32 GPIO is 3.3 V and is not 5 V tolerant; verify the exact meter's UART voltage and isolation before connecting it.
 
-**Mains installation must be performed and checked by a qualified electrician.** The meter, CT, enclosure, wiring and protection must be selected for the actual AC circuit and local electrical requirements. Never connect mains voltage to the ESP32, never handle exposed mains conductors, and do not assume every PZEM board has the same UART voltage or isolation design.
+The exact Samsung AC model and circuit rating have not been verified. Do not buy or install a meter based on assumed AC tonnage. Have an electrician check the nameplate and circuit first.
 
-The exact AC capacity/model and circuit rating have not yet been verified. Do not purchase or install a meter solely from an assumed tonnage. Confirm the nameplate and circuit rating with the electrician first.
+**Software status:** frontend, Express API, MongoDB data model, telemetry endpoints, ESP32 starter firmware and backend unit tests are in the repository. Live measurements require your MongoDB configuration and physical hardware installation. Demo mode is not real monitoring.
 
-## Current project status
+## 7. Production build
 
-- Frontend demo monitor: available without hardware.
-- Express/MongoDB API: implemented; requires environment configuration and a running MongoDB instance.
-- ESP32 firmware starter: committed; requires exact meter/library verification and user-specific Wi-Fi/API credentials.
-- Real AC measurements: **not active until the PZEM is purchased, safely installed, and the ESP32 is connected**.
+```powershell
+npm run build
+npm run preview
+```
+
+The frontend can be deployed to Vercel. Set `VITE_API_BASE_URL` to the deployed backend URL in the Vercel project environment variables. Deploy the backend separately with its MongoDB and device secrets configured; do not put the device API key in frontend environment variables.
