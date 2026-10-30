@@ -271,13 +271,22 @@ const Dashboard = () => {
             </p>
           </div>
 
-          <button
-            onClick={() => setShowAddRecord(true)}
-            className="flex w-fit items-center gap-2 rounded-lg bg-green-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
-          >
-            <Plus size={18} />
-            Add Record
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => navigate("/monitor")}
+              className="flex w-fit items-center gap-2 rounded-lg border border-green-600 bg-white px-5 py-3 text-sm font-semibold text-green-700 shadow-sm transition hover:bg-green-50"
+            >
+              <Activity size={18} />
+              AC Live Monitor
+            </button>
+            <button
+              onClick={() => setShowAddRecord(true)}
+              className="flex w-fit items-center gap-2 rounded-lg bg-green-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700"
+            >
+              <Plus size={18} />
+              Add Record
+            </button>
+          </div>
 
         </div>
 
