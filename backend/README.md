@@ -1,19 +1,55 @@
-# EcoTrack API (Phase 1)
+# EcoTrack API
 
-This API receives measurements from one ESP32 + PZEM-004T energy monitor and stores them in MongoDB. It is designed for real hardware readings; no AC wattage or usage hours are guessed.
+Express API for storing real measurements from an ESP32 + energy meter. It does not generate AC readings or infer usage from assumed wattage.
 
-## Setup
+## Requirements
 
-1. Install Node.js 20 or newer and MongoDB (local or hosted).
-2. From this folder run `npm install`.
-3. Copy `.env.example` to `.env` and configure MongoDB, a long random `DEVICE_API_KEY`, electricity tariff and grid emission factor.
-4. Run `npm run dev`.
+- Node.js 20.19+ (or 22.12+) and npm
+- MongoDB locally, or a MongoDB Atlas cluster
+- A meter/ESP32 configured to send actual readings
 
-The frontend is expected at `http://localhost:5173`. Change `CLIENT_ORIGIN` if needed.
+## Windows setup (PowerShell)
 
-## Device payload
+From the repository root, open a second VS Code terminal:
 
-Send a POST request to `/api/readings` with header `x-device-key: YOUR_DEVICE_API_KEY`:
+```powershell
+cd backend
+npm install
+Copy-Item .env.example .env
+```
+
+Open `backend/.env` and set `MONGODB_URI`, `DEVICE_API_KEY`, the electricity tariff from your bill, and a documented grid-emissions factor. Then start the API:
+
+```powershell
+npm run dev
+```
+
+The API starts at `http://localhost:5000` only after it can connect to MongoDB. Test it by opening `http://localhost:5000/api/health`. A healthy response reports `"status": "ok"` and `"database": "connected"`.
+
+For a hosted MongoDB Atlas database, create a database user, allow the development machine's IP address in Network Access, copy the Node.js connection string, and replace its password placeholder. Do not commit `.env` or share the connection string.
+
+## Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | API port (default 5000) |
+| `MONGODB_URI` | MongoDB connection string (required) |
+| `CLIENT_ORIGIN` | Comma-separated allowed browser origins |
+| `DEFAULT_DEVICE_ID` | Default device name (default `ESP32_AC_001`) |
+| `DEVICE_API_KEY` | Secret required for device POST requests |
+| `ELECTRICITY_TARIFF_INR_PER_KWH` | Tariff used for estimates |
+| `GRID_EMISSION_KG_CO2_PER_KWH` | Emissions factor used for estimates |
+
+## API endpoints
+
+- `GET /api/health` — API and MongoDB status
+- `POST /api/readings` — store one reading; requires `x-device-key`
+- `GET /api/readings/live?deviceId=ESP32_AC_001` — latest reading
+- `GET /api/readings/history?deviceId=ESP32_AC_001&limit=100` — recent readings
+- `GET /api/readings/analytics/daily?days=7` — daily consumption/cost/emissions
+- `GET /api/readings/analytics/monthly?months=6` — monthly consumption/cost/emissions
+
+Example device payload (illustrative shape only; values must come from the actual meter):
 
 ```json
 {
@@ -27,28 +63,24 @@ Send a POST request to `/api/readings` with header `x-device-key: YOUR_DEVICE_AP
 }
 ```
 
-These numbers are illustrative only. The ESP32 must send actual values read from the meter.
+## Data rules
 
-## Endpoints
+- The cumulative meter counter is stored as `meterEnergyKwh`.
+- Usage is calculated as the difference between consecutive counter values.
+- The first reading is a baseline and has zero interval usage.
+- A counter decrease is flagged as a reset; the API does not invent usage for that interval.
+- Estimated cost = interval kWh × configured INR/kWh tariff.
+- Estimated emissions = interval kWh × configured kg CO₂/kWh factor.
+- These are estimates; use the tariff from the electricity bill and a credible, documented emissions factor.
 
-- `GET /api/health`
-- `POST /api/readings` (device key required)
-- `GET /api/readings/live?deviceId=ESP32_AC_001`
-- `GET /api/readings/history?deviceId=ESP32_AC_001&limit=100`
-- `GET /api/readings/analytics/daily?days=7`
-- `GET /api/readings/analytics/monthly?months=6`
+## Tests
 
-Socket.IO broadcasts each accepted reading as `energy:reading`.
+Run the backend unit tests without a database:
 
-## Calculation notes
+```powershell
+npm test
+```
 
-The PZEM cumulative energy counter is stored as `meterEnergyKwh`. The API derives usage from the difference between consecutive readings and stores it as `deltaKwh`. If the meter counter goes backwards (for example, after a reset), that reading is flagged and its delta is set to zero. The first reading has no previous baseline, so its delta is zero.
+## Electrical safety
 
-Estimated cost = measured kWh × configured INR/kWh tariff.
-Estimated emissions = measured kWh × configured kg CO2/kWh factor.
-
-Tariff and emission factor are configurable assumptions, not universal constants. Configure values appropriate to the electricity bill and chosen emissions source before presenting estimates as final.
-
-## Safety
-
-A qualified electrician must install and inspect the PZEM on the AC circuit. Never connect mains wiring to the ESP32, and never handle exposed mains conductors. Confirm the exact PZEM version, current transformer rating, isolation and UART voltage levels before connecting low-voltage electronics.
+A qualified electrician must select, install and inspect the correctly rated meter/CT, enclosure, wiring and protection for the AC circuit. Never connect mains voltage to ESP32 GPIO or handle exposed mains conductors. ESP32 GPIO is 3.3 V and is not 5 V tolerant; verify the exact meter's UART interface and isolation before connecting it. The existing sketch is a hardware starter, not proof that a particular PZEM board is safe or compatible.
