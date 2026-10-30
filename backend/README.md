@@ -73,6 +73,16 @@ Example device payload (illustrative shape only; values must come from the actua
 - Estimated emissions = interval kWh × configured kg CO₂/kWh factor.
 - These are estimates; use the tariff from the electricity bill and a credible, documented emissions factor.
 
+## API/database smoke test
+
+For a safe end-to-end API/database smoke test (the values are simulated and use a separate device ID, so they cannot be mistaken for your real AC device), keep the backend running and open a second terminal in `backend`:
+
+```powershell
+npm run test:reading
+```
+
+Then verify the stored test record at `http://localhost:5000/api/readings/live?deviceId=ESP32_AC_001_TEST`. This test requires `DEVICE_API_KEY` in your local `.env` and does not send or expose the key to the frontend.
+
 ## Tests
 
 Run the backend unit tests without a database:
