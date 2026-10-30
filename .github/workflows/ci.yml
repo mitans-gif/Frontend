@@ -28,3 +28,6 @@ jobs:
           node --check backend/src/server.js
           node --check backend/src/routes/readings.js
           node --check backend/src/models/EnergyReading.js
+          node --check backend/src/utils/energy.js
+      - name: Run backend unit tests
+        run: npm --prefix backend test
